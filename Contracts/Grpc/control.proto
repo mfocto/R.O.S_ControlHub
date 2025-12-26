@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package control;
+
+// 현재는 확정 스키마가 없으므로 빈 서비스로 시작
+// 나중에 아래처럼 확장 가능:
+// - CommandUnary(고수준 명령)
+// - QueryUnary(상태 조회)
+// - StreamState(상태 스트리밍)
+service ControlService {
+}
