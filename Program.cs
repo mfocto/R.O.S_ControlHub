@@ -42,17 +42,26 @@ builder.Services.AddSingleton<IOpcUaAdapter, OpcUaStubAdapter>();
 
 builder.Services.AddHostedService<StatePollingWorker>();
 
+
+builder.WebHost.UseUrls("http://0.0.0.0:5178");
+
 var app = builder.Build();
 // -------------------------------------
 // HTTP Endpoints
 // -------------------------------------
-
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.MapControllers();
 
 // signalR hub
 app.MapHub<StateHub>("hubs/state");
 
+app.MapHub<WebRtcHub>("/hubs/webrtc");
+
 // gRPC
 app.MapGrpcService<PlaceholderGrpcService>();
+
+
+
 
 app.Run();
