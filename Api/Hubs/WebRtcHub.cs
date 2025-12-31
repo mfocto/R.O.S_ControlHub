@@ -16,7 +16,7 @@ public class WebRtcHub : Hub
     {
         _viewers[Context.ConnectionId] = roomId;
         await Groups.AddToGroupAsync(Context.ConnectionId, $"room:{roomId}:viewers");
-
+        
         // 이미 broadcaster가 있으면, 새로 열린 창에도 알려줌
         if (Broadcasters.TryGetValue(roomId, out var broadcasterId))
         {
@@ -34,30 +34,49 @@ public class WebRtcHub : Hub
         await Groups.AddToGroupAsync(Context.ConnectionId, $"room:{roomId}:broadcaster");
         
         await Clients.Group($"room:{roomId}:viewers").SendAsync("BroadcasterOnline", Context.ConnectionId);
+        
     }
     
     // Offer / Answer / ICE relay
     public Task Relay(string roomId, string type, string payload, string? targetId = null)
     {
-        Console.WriteLine($"[Relay] {Context.ConnectionId} {type} {payload}");
+        Console.WriteLine($"[Relay] type : {type}, target : {targetId}");
         if (targetId != null)
         {
             return Clients.Client(targetId).SendAsync("Signal", type, payload, Context.ConnectionId);
         }
         
-        return Clients.Group(roomId).SendAsync("Signal", type, payload, Context.ConnectionId);
+        return Clients.Group($"room:{roomId}:viewers").SendAsync("Signal", type, payload, Context.ConnectionId);
     }
 
     public Task CheckBroadcaster(string roomId)
     {
-        int broadCasterCount = Broadcasters[roomId].Length;
-
-        if (broadCasterCount > 1)
+        if (Broadcasters.TryGetValue(roomId, out var broadcasterId))
         {
-            return Clients.Caller.SendAsync("BroadcasterOnline", Context.ConnectionId);
+            return Clients.Caller.SendAsync("BroadcasterOnline", broadcasterId);
         }
 
-        return Clients.Caller.SendAsync("BroadcasterNotOnline", Context.ConnectionId);
+        return Clients.Caller.SendAsync("BroadcasterNotOnline");
+    }
+    
+    /// <summary>
+    /// 웹 뷰어에서 Unity로 제어 명령 전송
+    /// </summary>
+    /// <param name="roomId">방 ID</param>
+    /// <param name="command">명령 타입 (예: "move", "rotate", "emergency")</param>
+    /// <param name="value">명령 값 (예: "forward", "left", "stop")</param>
+    public Task SendControlCommand(string roomId, string command, string value)
+    {
+        Console.WriteLine($"[Control] roomId: {roomId}, command: {command}, value: {value}");
+        
+        if (Broadcasters.TryGetValue(roomId, out var broadcasterId))
+        {
+            // Unity broadcaster에게 제어 명령 전송
+            return Clients.Client(broadcasterId).SendAsync("ControlCommand", command, value);
+        }
+        
+        Console.WriteLine($"[Control] Broadcaster not found for room: {roomId}");
+        return Task.CompletedTask;
     }
     
     //
