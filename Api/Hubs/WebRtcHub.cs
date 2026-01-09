@@ -1,16 +1,24 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
+using ROS_ControlHub.Infrastructure.Database;
+using ROS_ControlHub.Adapters.Abstractions;
+using ROS_ControlHub.Application.Entities;
 
 namespace ROS_ControlHub.Api.Hubs;
 
 /// <summary>
 /// unity - web 시그널링 담당
 /// </summary>
-public class WebRtcHub : Hub
+public class WebRtcHub(
+    AppDbContext context,
+    IOpcUaAdapter opcAdapter
+    ) : Hub
 {
     private static readonly ConcurrentDictionary<string, string> Broadcasters = new();
     private static readonly ConcurrentDictionary<string, string> _viewers = new();
     
+    // DB context & Adapter
+
     // web
     public async Task JoinViewers(string roomId)
     {
@@ -60,40 +68,60 @@ public class WebRtcHub : Hub
     }
     
     /// <summary>
-    /// 웹 뷰어에서 Unity로 제어 명령 전송
+    /// 웹 뷰어에서 제어 명령 전송
     /// </summary>
-    /// <param name="roomId">방 ID</param>
-    /// <param name="command">명령 타입 (예: "move", "rotate", "emergency")</param>
-    /// <param name="value">명령 값 (예: "forward", "left", "stop")</param>
-    public Task SendControlCommand(string roomId, string command, string value)
+    public async Task SendControlCommand(string roomId, string command, string value)
     {
         Console.WriteLine($"[Control] roomId: {roomId}, command: {command}, value: {value}");
         
-        if (Broadcasters.TryGetValue(roomId, out var broadcasterId))
+        // 1. DB 로그 저장
+        try 
         {
-            // Unity broadcaster에게 제어 명령 전송
-            return Clients.Client(broadcasterId).SendAsync("ControlCommand", command, value);
+            var log = new SystemLogEntity
+            {
+                // roomId를 DevicePk로 매핑하거나 별도 로직 필요. 여기서는 임시로 0 또는 특정 값 사용
+                // RoomPk = ... 
+                Component = "WebControl",
+                Severity = "INFO",
+                EventType = "CONTROL_COMMAND",
+                Message = $"Command: {command}, Value: {value}",
+                OccurredAt = DateTimeOffset.UtcNow
+            };
+
+            context.Logs.Add(log);
+            await context.SaveChangesAsync();
         }
-        
-        Console.WriteLine($"[Control] Broadcaster not found for room: {roomId}");
-        return Task.CompletedTask;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Log save failed: {ex.Message}");
+        }
+
+        // 2. 실제 설비 제어 (OPC-UA)
+        try
+        {
+            // value가 JSON 형태이거나 단순 문자열일 수 있음. 프로토콜에 맞게 변환 필요.
+            // 여기서는 value를 그대로 payload로 가정하고 전송
+            // roomId를 DeviceId로 가정
+            var deviceId = roomId; 
+            var stateJson = $"{{\"command\": \"{command}\", \"payload\": \"{value}\"}}";
+            
+            await opcAdapter.WriteStateAsync(deviceId, stateJson);
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Adapter write failed: {ex.Message}");
+        }
     }
-    
-    //
-    // public async Task BroadcasterReady(string roomId)
-    // {
-    //     await Clients.Group(roomId).SendAsync("BroadcasterReady");
-    // }
     
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        // ... (기존 동일)
         // broadcaster가 나간 경우
         foreach (var kv in Broadcasters)
         {
             if (kv.Value == Context.ConnectionId)
             {
                 Broadcasters.TryRemove(kv.Key, out _);
-                // viewers에게 오프라인 알림을 원하면 여기에 추가
                 break;
             }
         }

@@ -6,11 +6,9 @@ public record SystemStateDto
 {
     public DateTimeOffset timeStamp { get; init; }
 
-    public SystemMode systemMode { get; init; } = SystemMode.Idle;
-
-    public JobPhase jobPhase { get; init; } = JobPhase.None;
+    public string deviceName { get; init; } = "";
     
-    public bool emergencyStop { get; init; }
+    public string deviceStatus { get; init; } = "";
     
     public Dictionary<string, object> extensions { get; init; } = new();
 
@@ -18,9 +16,8 @@ public record SystemStateDto
         => new()
         {
             timeStamp = s.timestamp,
-            systemMode = s.systemMode,
-            jobPhase = s.jobPhase,
-            emergencyStop = s.emergencyStop,
+            deviceName = s.deviceName,
+            deviceStatus = s.deviceStatus,
             extensions = s.extensions.ToDictionary(k => k.Key, v => v.Value)
         };
 }

@@ -9,4 +9,7 @@ public interface IOpcUaAdapter
 {
     // 설비 상태를 읽어 Extexsions 형태로 반환
     Task<IDictionary<string, object>> ReadStateAsync(CancellationToken ct);
+
+    // 설비 상태 제어 (쓰기)
+    Task WriteStateAsync(string deviceId, string stateJson);
 }

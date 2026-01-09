@@ -22,7 +22,7 @@ public class InMemoryStateStore
             // 둘이 같다면 _updated 로 값 변경
             // 만약 중간에 다른 스레드가 값을 변경 시 교체X
             var original = Interlocked.CompareExchange(ref _current, updated, snapshot);
-
+            
             if (ReferenceEquals(original, snapshot))
                 // 값 업데이트 성공시에만 루프 탈출
                 break;

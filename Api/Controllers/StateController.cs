@@ -20,7 +20,6 @@ public class StateController(InMemoryStateStore store) : ControllerBase
          * emergencyStop : 비상정지 여부
          * extensions : 확장용 슬롯
          */
-        string s = string.Empty;
         var snapshot = _store.GetSnapshot();
         var dto = SystemStateDto.From(snapshot);
 

@@ -17,4 +17,11 @@ public class OpcUaStubAdapter : IOpcUaAdapter
         
         return Task.FromResult(ext);
     }
+
+    public Task WriteStateAsync(string deviceId, string stateJson)
+    {
+        // Mock 구현: 실제 OPC-UA 쓰기 대신 콘솔 로그
+        Console.WriteLine($"[OPC-UA Write] DeviceId: {deviceId}, State: {stateJson}");
+        return Task.CompletedTask;
+    }
 }

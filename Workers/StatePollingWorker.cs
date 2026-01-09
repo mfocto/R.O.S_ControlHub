@@ -2,13 +2,12 @@ using Microsoft.AspNetCore.SignalR;
 using ROS_ControlHub.Adapters.Abstractions;
 using ROS_ControlHub.Api.Hubs;
 using ROS_ControlHub.Application.State;
-using ROS_ControlHub.Application.Workflow;
 using ROS_ControlHub.Contracts.Dto;
 
 namespace ROS_ControlHub.Workers;
 
 public class StatePollingWorker(
-    IRosAdapter ros,
+    // IRosAdapter ros, // 제거
     IOpcUaAdapter opc,
     InMemoryStateStore store,
     IHubContext<StateHub> hub,
@@ -16,7 +15,7 @@ public class StatePollingWorker(
     IConfiguration config
     ) : BackgroundService
 {
-    private readonly IRosAdapter _ros = ros;
+    // private readonly IRosAdapter _ros = ros;
     private readonly IOpcUaAdapter _opc = opc;
     private readonly InMemoryStateStore _store = store;
     private readonly IHubContext<StateHub> _hub = hub;
@@ -32,22 +31,24 @@ public class StatePollingWorker(
         {
             try
             {
-                var rosExt = await _ros.ReadStateAsync(ct);
+                // var rosExt = await _ros.ReadStateAsync(ct);
                 var opcExt = await _opc.ReadStateAsync(ct);
                 
                 _store.Update(prev =>
                 {
                     var merged = prev.extensions.ToDictionary(k => k.Key, v => v.Value);
                     
-                    foreach (var kv in rosExt) merged[kv.Key] = kv.Value;
+                    // foreach (var kv in rosExt) merged[kv.Key] = kv.Value;
                     foreach (var kv in opcExt) merged[kv.Key] = kv.Value;
 
-                    var nextPhase = JobStateMachine.Next(prev.jobPhase);
+                    var deviceName = Convert.ToString(merged["deviceName"]);
+                    var deviceStatus = Convert.ToString(merged["deviceStatus"]);
 
                     return prev with
                     {
                         timestamp = DateTimeOffset.UtcNow,
-                        jobPhase = nextPhase,
+                        deviceName = deviceName,
+                        deviceStatus = deviceStatus,
                         extensions = merged
                     };
                 });
@@ -59,7 +60,7 @@ public class StatePollingWorker(
                     .Group("default")
                     .SendAsync("SystemStateUpdated", dto, ct);
                 
-                _logger.LogDebug("SystemStateUpdated broadcasted. JobPhase={JobPhase}", dto.jobPhase);
+                _logger.LogDebug("SystemStateUpdated broadcasted. device = {deviceName}, status={deviceStatus}", dto.deviceName, dto.deviceStatus);
                 
                 await Task.Delay(_intervalMs, ct);
             }
