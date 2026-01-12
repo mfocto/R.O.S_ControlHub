@@ -88,7 +88,7 @@ public class OpcUaClientAdapter : IOpcUaAdapter, IDisposable
         _logger = logger;
         _configuration = config;
         
-        // Kepware OPC UA 서버 주소 - 기본값은 로컬호스트의 Kepware 기본 포트
+        // TODO: Kepware OPC UA 서버 주소 - 기본값은 로컬호스트의 Kepware 기본 포트
         _endpointUrl = config.GetValue("OpcUa:EndpointUrl", "opc.tcp://127.0.0.1:49320")!;
         
         // OPC UA 세션 이름 - Kepware 서버에서 이 클라이언트를 식별
@@ -127,6 +127,13 @@ public class OpcUaClientAdapter : IOpcUaAdapter, IDisposable
         
         // 세션 타임아웃 - 60초 동안 통신이 없으면 세션이 만료됨 (기본값)
         var sessionTimeout = _configuration.GetValue("OpcUa:SessionTimeoutMs", 60000);
+        
+        // 인증서 저장 경로 - 설정 파일에서 읽거나 기본값 사용
+        // 기본값: c:/auth/pki/own, c:/auth/pki/trusted, c:/auth/pki/rejected, c:/auth/pki/issuers
+        var certOwnPath = _configuration.GetValue("OpcUa:CertificatePaths:Own", "c:/auth/pki/own");
+        var certTrustedPath = _configuration.GetValue("OpcUa:CertificatePaths:Trusted", "c:/auth/pki/trusted");
+        var certRejectedPath = _configuration.GetValue("OpcUa:CertificatePaths:Rejected", "c:/auth/pki/rejected");
+        var certIssuersPath = _configuration.GetValue("OpcUa:CertificatePaths:Issuers", "c:/auth/pki/issuers");
 
         var config = new ApplicationConfiguration
         {
@@ -138,26 +145,47 @@ public class OpcUaClientAdapter : IOpcUaAdapter, IDisposable
             {
                 // 클라이언트 애플리케이션 인증서 저장 위치
                 // 이 인증서는 Kepware 서버에 자신을 인증하는 데 사용됨
+                // 
+                // [인증서 경로 설정]
+                // - 설정 파일(appsettings.json)의 "OpcUa:CertificatePaths:Own"에서 경로를 읽습니다.
+                // - 기본값: "c:/auth/pki/own"
+                // - 이 경로는 애플리케이션 실행 시 자동으로 생성됩니다.
+                // - 인증서는 OPC UA SDK가 자동으로 생성하고 관리합니다.
                 ApplicationCertificate = new CertificateIdentifier 
                 { 
                     StoreType = "Directory", 
-                    StorePath = @"%CommonApplicationData%\ROS_ControlHub\pki\own", 
+                    StorePath = certOwnPath, 
                     SubjectName = "ROS_ControlHub" 
                 },
                 
                 // 신뢰할 수 있는 서버 인증서 저장 위치
                 // Kepware 서버의 인증서가 여기에 저장되면 자동으로 신뢰됨
+                // 설정 파일의 "OpcUa:CertificatePaths:Trusted"에서 경로를 읽습니다.
+                // 기본값: "c:/auth/pki/trusted"
                 TrustedPeerCertificates = new CertificateTrustList 
                 { 
                     StoreType = "Directory", 
-                    StorePath = @"%CommonApplicationData%\ROS_ControlHub\pki\trusted" 
+                    StorePath = certTrustedPath 
+                },
+                
+                // 발행자 인증서 저장 위치 (필수)
+                // 인증서를 발행한 CA(Certificate Authority)의 인증서 저장 경로
+                // 설정 파일의 "OpcUa:CertificatePaths:Issuers"에서 경로를 읽습니다.
+                // 기본값: "c:/auth/pki/issuers"
+                TrustedIssuerCertificates = new CertificateTrustList 
+                { 
+                    StoreType = "Directory", 
+                    StorePath = certIssuersPath 
                 },
                 
                 // 거부된 인증서 저장 위치
+                // 신뢰할 수 없는 인증서가 여기에 저장됨
+                // 설정 파일의 "OpcUa:CertificatePaths:Rejected"에서 경로를 읽습니다.
+                // 기본값: "c:/auth/pki/rejected"
                 RejectedCertificateStore = new CertificateTrustList 
                 { 
                     StoreType = "Directory", 
-                    StorePath = @"%CommonApplicationData%\ROS_ControlHub\pki\rejected" 
+                    StorePath = certRejectedPath 
                 },
                 
                 // 신뢰되지 않은 인증서 자동 수락 - 개발 환경 편의를 위해
@@ -191,12 +219,41 @@ public class OpcUaClientAdapter : IOpcUaAdapter, IDisposable
 
         // 인증서 검증 이벤트 핸들러
         // Kepware 서버의 인증서가 신뢰되지 않을 때 자동으로 수락하도록 설정
+        // [작성 이유]
+        // - OPC UA 연결 시 Kepware 서버의 인증서 검증이 실패하면 연결이 차단됩니다.
+        // - 개발 환경에서는 자동으로 인증서를 수락하여 편의성을 제공합니다.
+        // - 프로덕션 환경에서는 AutoAcceptUntrustedCertificates를 false로 설정하고 인증서를 신뢰 목록에 추가해야 합니다.
         config.CertificateValidator.CertificateValidation += (s, e) =>
         {
-            if (e.Error.StatusCode == Opc.Ua.StatusCodes.BadCertificateUntrusted && autoAcceptCerts)
+            // 모든 인증서 검증 이벤트를 로깅하여 문제 진단 가능하도록 함
+            _logger.LogDebug(
+                "Certificate validation event. Status: {Status}, Subject: {Subject}, Error: {Error}",
+                e.Error.StatusCode,
+                e.Certificate?.Subject ?? "Unknown",
+                e.Error);
+            
+            // AutoAcceptUntrustedCertificates가 활성화되어 있으면 여러 인증서 오류 유형 자동 수락
+            if (autoAcceptCerts)
             {
-                _logger.LogWarning("Accepting untrusted Kepware server certificate: {Subject}", e.Certificate.Subject);
-                e.Accept = true; // 인증서를 수락하여 연결 계속 진행
+                // 신뢰되지 않은 인증서
+                if (e.Error.StatusCode == Opc.Ua.StatusCodes.BadCertificateUntrusted ||
+                    // 인증서 체인 불완전
+                    e.Error.StatusCode == Opc.Ua.StatusCodes.BadCertificateChainIncomplete ||
+                    // 잘못된 인증서
+                    e.Error.StatusCode == Opc.Ua.StatusCodes.BadCertificateInvalid)
+                {
+                    _logger.LogWarning("Auto-accepting certificate due to {Status}: {Subject}", 
+                        e.Error.StatusCode, 
+                        e.Certificate?.Subject ?? "Unknown");
+                    e.Accept = true; // 인증서를 수락하여 연결 계속 진행
+                }
+            }
+            else
+            {
+                // AutoAcceptUntrustedCertificates가 비활성화된 경우 오류만 로깅
+                _logger.LogError("Certificate validation failed and auto-accept is disabled. Status: {Status}, Subject: {Subject}",
+                    e.Error.StatusCode,
+                    e.Certificate?.Subject ?? "Unknown");
             }
         };
 

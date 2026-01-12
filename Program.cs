@@ -7,7 +7,7 @@ using ROS_ControlHub.Api.Hubs;
 using ROS_ControlHub.Application.State;
 using ROS_ControlHub.Contracts.Grpc;
 using ROS_ControlHub.Workers;
-using ROS_ControlHub.Infrastructure.Extensions;
+// using ROS_ControlHub.Infrastructure.Extensions; // DB 연결 제거
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +21,7 @@ builder.Services.AddSignalR();  // SignalR: web - unity 용 통신채널
 
 builder.Services.AddGrpc(); // gRPC : ROS 연동용
 
-builder.Services.AddInfrastructure(builder.Configuration);
+// builder.Services.AddInfrastructure(builder.Configuration); // DB 연결 제거
 
 // -------------------------------------
 // state store
@@ -47,8 +47,8 @@ builder.Services.AddSingleton<IOpcUaAdapter, OpcUaClientAdapter>();
 
 builder.Services.AddHostedService<StatePollingWorker>();
 
-// 시작 시 복구 서비스
-builder.Services.AddHostedService<StartupRecoveryService>();
+// 시작 시 복구 서비스 (DB 사용으로 인해 비활성화)
+// builder.Services.AddHostedService<StartupRecoveryService>();
 
 
 builder.WebHost.UseUrls("http://0.0.0.0:5178");

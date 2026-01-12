@@ -1,8 +1,8 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
-using ROS_ControlHub.Infrastructure.Database;
+// using ROS_ControlHub.Infrastructure.Database; // DB 연결 제거
 using ROS_ControlHub.Adapters.Abstractions;
-using ROS_ControlHub.Application.Entities;
+// using ROS_ControlHub.Application.Entities; // DB 연결 제거
 
 namespace ROS_ControlHub.Api.Hubs;
 
@@ -10,7 +10,7 @@ namespace ROS_ControlHub.Api.Hubs;
 /// unity - web 시그널링 담당
 /// </summary>
 public class WebRtcHub(
-    AppDbContext context,
+    // AppDbContext context, // DB 연결 제거
     IOpcUaAdapter opcAdapter
     ) : Hub
 {
@@ -74,29 +74,9 @@ public class WebRtcHub(
     {
         Console.WriteLine($"[Control] roomId: {roomId}, command: {command}, value: {value}");
         
-        // 1. DB 로그 저장
-        try 
-        {
-            var log = new SystemLogEntity
-            {
-                // roomId를 DevicePk로 매핑하거나 별도 로직 필요. 여기서는 임시로 0 또는 특정 값 사용
-                // RoomPk = ... 
-                Component = "WebControl",
-                Severity = "INFO",
-                EventType = "CONTROL_COMMAND",
-                Message = $"Command: {command}, Value: {value}",
-                OccurredAt = DateTimeOffset.UtcNow
-            };
-
-            context.Logs.Add(log);
-            await context.SaveChangesAsync();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Log save failed: {ex.Message}");
-        }
-
-        // 2. 실제 설비 제어 (OPC-UA)
+        // DB 로그 저장 제거됨
+        
+        // 실제 설비 제어 (OPC-UA)
         try
         {
             // value가 JSON 형태이거나 단순 문자열일 수 있음. 프로토콜에 맞게 변환 필요.
